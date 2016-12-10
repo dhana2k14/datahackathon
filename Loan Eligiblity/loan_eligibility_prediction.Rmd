@@ -1,0 +1,134 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+## Setup working directory, Install and Load required libraries 
+
+```{r}
+setwd('D:/Kaggle/Loan Eligiblity')
+
+pkgs <- c('glm2', 'dplyr', 'tree', 'randomForest', 'e1071')
+for (pkg in pkgs)
+{
+  if(!(pkg %in% rownames(installed.packages()))){install.packages(pkg)}
+}
+
+```
+
+```{r}
+library(dplyr)
+library(e1071)
+```
+
+```{r}
+train <- read.csv('train.csv', sep = ',', header = T, stringsAsFactors = F)
+test  <- read.csv('test.csv', sep = ',', header = T, stringsAsFactors = F)
+
+head(train)
+glimpse(train)
+```
+
+# Apply Boruta algorithm to select important features to the model
+# Convert all character variables to factor
+
+```{r, echo = FALSE}
+for(i in 1:ncol(train))
+  {
+  
+  if (sapply(train[,i], class) == 'character')
+  {
+    train[,i] <- as.factor(train[,i])
+  }
+}
+
+glimpse(train)
+
+```
+
+# Replacing missing values 
+
+```{r}
+
+summary(train)
+
+```
+
+```{r}
+
+train <- train %>%
+  mutate(LoanAmount = ifelse(is.na(LoanAmount), mean(LoanAmount, na.rm = TRUE), LoanAmount),
+         loan_to_income = round(LoanAmount/ApplicantIncome, 2),
+         Loan_Amount_Term = ifelse(is.na(Loan_Amount_Term), mean(Loan_Amount_Term, na.rm = TRUE), Loan_Amount_Term),
+         Credit_History = ifelse(is.na(Credit_History), median(Credit_History, na.rm = TRUE), Credit_History))
+
+table(is.na(train))
+```
+
+## Boruta
+
+```{r}
+bor.tr <- Boruta(Loan_Status ~. -Loan_ID, data = train)
+plot(bor.tr)
+
+```
+
+```{r}
+
+getSelectedAttributes(bor.tr)
+
+```
+
+```{r}
+train <- train[,c(1,7,8,9,10,11,12,13,14)]
+```
+
+```{r}
+
+nb.fit <- naiveBayes(Loan_Status ~. -Loan_ID, data = train)
+summary(nb.fit)
+```
+
+# Predict on test dataset
+
+
+```{r}
+test <- test %>%
+  mutate(LoanAmount = ifelse(is.na(LoanAmount), mean(LoanAmount, na.rm = TRUE), LoanAmount),
+         loan_to_income = round(LoanAmount/ApplicantIncome, 2),
+         Loan_Amount_Term = ifelse(is.na(Loan_Amount_Term), mean(Loan_Amount_Term, na.rm = TRUE), Loan_Amount_Term),
+         Credit_History = ifelse(is.na(Credit_History), median(Credit_History, na.rm = TRUE), Credit_History))
+
+table(is.na(test))
+```
+
+```{r}
+
+nb.pred = predict(nb.fit, newdata = test)
+```
+
+```{r}
+
+table(pred, train$Loan_Status)
+
+```
+
+```{r}
+
+sub.file <- read.csv('Sample_Submission.csv', sep = ',', header = T)
+```
+
+```{r}
+
+test.sub <- cbind(test, nb.pred)
+head(test.sub)
+
+```
+
+```{r}
+test.sub %>% select(Loan_ID, nb.pred) %>%
+  rename(Loan_Status = nb.pred) %>% write.csv('submission.csv', row.names = FALSE)
+
+
+
+```
+
